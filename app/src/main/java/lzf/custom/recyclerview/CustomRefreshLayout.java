@@ -5,10 +5,12 @@ import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 
+import lzf.custom.recyclerview.animation.GoogleDotView;
 import lzf.custom.recyclerview.base.IBottomView;
 import lzf.custom.recyclerview.base.IHeadView;
 import lzf.custom.recyclerview.base.LayoutOperationListener;
@@ -24,17 +26,19 @@ import lzf.custom.recyclerview.proxy.OverScrollProxy;
 public class CustomRefreshLayout extends RelativeLayout {
     //    private static final int MAX_Y_OVER_SCROLL_DISTANCE=200;
     private Context mContext;
-    private int mMaxYOverScrollDistance = 250;//y轴最大越界距离 超出了即不再滑动
+    private int mMaxYOverScrollDistance = 500;//y轴最大越界距离 超出了即不再滑动
     protected boolean enableOverScroll = true; //是否允许进入越界回弹模式
     private View childView;//子view 要刷新的view
     private FrameLayout headLayout;//头部的布局
     private FrameLayout bottomLayout;//底部的布局
     private IHeadView headView;
     private IBottomView bottomView;
-    private float headHeight = 200;//头部的高度
-    private float bottomHeight = 200;//底部的高度
+    private float headHeight = 400;//头部的高度
+    private float bottomHeight = 400;//底部的高度
     private boolean enableRefresh = true;//是否允许刷新
     private boolean enableLoadMore = true;//是否允许加载
+    protected boolean isRefreshVisible = false;   //是否刷新视图可见
+    protected boolean isLoadingVisible = false;   //是否加载更多视图可见
     private CustomRefreshLayoutProxy customRefreshLayoutProxy;//事件处理 动画、越界、事件分发
 
     public CustomRefreshLayout(Context context) {
@@ -68,17 +72,17 @@ public class CustomRefreshLayout extends RelativeLayout {
             headLayout = headViewLayout;
             if (headView == null) {
                 //添加默认的头部
-                setHeaderView(null);
+                setHeaderView(new GoogleDotView(getContext()));
             }
         }
         //添加底部
         if (bottomLayout == null) {
             FrameLayout bottomViewLayout = new FrameLayout(getContext());
-            LayoutParams layoutParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0);
+            LayoutParams layoutParams = new LayoutParams(LayoutParams.MATCH_PARENT, 0);
             layoutParams.addRule(ALIGN_PARENT_BOTTOM);
             layoutParams.addRule(CENTER_VERTICAL);
             bottomViewLayout.setLayoutParams(layoutParams);
-            this.addView(bottomLayout, layoutParams);
+            this.addView(bottomViewLayout, layoutParams);
             bottomLayout = bottomViewLayout;
             if (bottomView == null) {
                 //设置默认底部view
@@ -87,13 +91,29 @@ public class CustomRefreshLayout extends RelativeLayout {
         }
         //获取子控件
         childView=getChildAt(0);
-
+        customRefreshLayoutProxy=new CustomRefreshLayoutProxy();
         customRefreshLayoutProxy.init();
     }
 
     private void setPullListener(CustomRefreshLayoutListener customRefreshLayoutListener) {
         this.customRefreshLayoutListener = customRefreshLayoutListener;
     }
+
+
+    /**
+     * 刷新结束
+     */
+    public void finishRefreshing() {
+        customRefreshLayoutProxy.onFinishRefresh();
+    }
+
+    /**
+     * 加载更多结束
+     */
+    public void finishLoadMore() {
+        customRefreshLayoutProxy.onFinishLoadMore();
+    }
+
 
     /*
     * 事件分发
@@ -174,21 +194,19 @@ public class CustomRefreshLayout extends RelativeLayout {
 
         @Override
         public void onFinishRefresh() {
-            if (enableRefresh){
+            if (!isRefreshVisible) return;
                 headView.onFinish(new OnAnimEndListener() {
                     @Override
                     public void onAnimEnd() {
-
+                        customRefreshLayoutProxy.finishRefreshAfterAnim();
                     }
                 });
-            }
         }
 
         @Override
         public void onFinishLoadMore() {
-            if (enableLoadMore) {
+            if (!isLoadingVisible) return;
                 bottomView.onFinish();
-            }
         }
     }
     /*
@@ -215,6 +233,7 @@ public class CustomRefreshLayout extends RelativeLayout {
         public void init() {
             if (headLayout!=null) headLayout.setVisibility(GONE);
             if (bottomLayout!=null) bottomLayout.setVisibility(GONE);
+            overScrollProxy.init();
         }
 
         public AnimationProxy getAnimationProxy() {
@@ -239,18 +258,6 @@ public class CustomRefreshLayout extends RelativeLayout {
 
         public float getMaxHeadHeight() {
             return mMaxYOverScrollDistance;
-        }
-
-        public View getHeader() {
-            return headLayout;
-        }
-
-        public View getBottom() {
-            return bottomLayout;
-        }
-
-        public View getContent() {
-            return childView;
         }
 
         /*
@@ -281,12 +288,82 @@ public class CustomRefreshLayout extends RelativeLayout {
             customRefreshLayoutListener.onFinishLoadMore();
         }
 
+        public void finishRefreshAfterAnim() {
+            if (isRefreshVisible() && childView != null) {
+                setRefreshing(false);
+                animationProxy.animHeadBack();
+            }
+        }
+
         public void onPullDownReleasing(float offsetY) {
             customRefreshLayoutListener.onPullDownReleasing(CustomRefreshLayout.this, offsetY / headHeight);
         }
 
         public void onPullUpReleasing(float offsetY) {
             customRefreshLayoutListener.onPullUpReleasing(CustomRefreshLayout.this, offsetY / bottomHeight);
+        }
+
+        public boolean isRefreshVisible() {
+            return isRefreshVisible;
+        }
+
+        public boolean isLoadingVisible() {
+            return isLoadingVisible;
+        }
+
+        public void setRefreshing(boolean refreshing) {
+            isRefreshVisible = refreshing;
+        }
+
+        public void setLoadingMore(boolean loadingMore) {
+            isLoadingVisible = loadingMore;
+        }
+
+        public View getChild(){
+            return childView;
+        }
+
+        public View getHeader() {
+            return headLayout;
+        }
+
+        public View getBottom() {
+            return bottomLayout;
+        }
+
+        public View getContent() {
+            return childView;
+        }
+
+        public float getChildHeight(){
+            return childView.getHeight();
+        }
+
+        public int getHeadHeight() {
+            return (int) headHeight;
+        }
+
+        public int getBottomHeight(){
+            return (int) bottomHeight;
+        }
+
+        public void resetHeaderView() {
+            if (headView != null) headView.reset();
+        }
+
+        public void resetBottomView() {
+            if (bottomView != null) bottomView.reset();
+        }
+
+        /*
+        * 最小可识别滑动距离
+        * */
+        public int getMinSwipeDistance() {
+            return ViewConfiguration.get(getContext()).getScaledTouchSlop();
+        }
+
+        public Context getContext() {
+            return CustomRefreshLayout.this.getContext();
         }
         /*
         * 事件分发
@@ -298,6 +375,7 @@ public class CustomRefreshLayout extends RelativeLayout {
         public boolean onTouchEvent(MotionEvent ev) {
             return dispatchEventProxy.onTouchEvent(ev);
         }
+
     }
     private void setBottomView(final IBottomView iBottomView) {
         if (iBottomView != null) {

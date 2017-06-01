@@ -51,17 +51,34 @@ public class DispatchEventProxy {
         return false;
     }
     public boolean onTouchEvent(MotionEvent event){
+        if (customRefreshLayoutProxy.isRefreshVisible() ||
+                customRefreshLayoutProxy.isLoadingVisible()) return false;
         switch (event.getAction()){
             case MotionEvent.ACTION_MOVE:
                 float dy=event.getY()-touchY;
-                if (customRefreshLayoutProxy.getState()== CustomRefreshLayout.CustomRefreshLayoutProxy.FROM_TOP_TO_BOTTOM){
-                    dy=Math.min(customRefreshLayoutProxy.getMaxHeadHeight(),dy);
+                //下拉刷新
+                if (customRefreshLayoutProxy.getState()==
+                        CustomRefreshLayout.CustomRefreshLayoutProxy.FROM_TOP_TO_BOTTOM){
+                    dy=Math.min(customRefreshLayoutProxy.getMaxHeadHeight()*2,dy);
                     dy=Math.max(0,dy);
                     customRefreshLayoutProxy.getAnimationProxy().scrollHeaderByMove(dy);
+                }else if (customRefreshLayoutProxy.getState()==
+                        CustomRefreshLayout.CustomRefreshLayoutProxy.FROM_BOTTOM_TO_TOP){
+                    //上拉加载
+                    dy = Math.min(customRefreshLayoutProxy.getBottomHeight() * 2, Math.abs(dy));
+                    dy = Math.max(0, dy);
+                    customRefreshLayoutProxy.getAnimationProxy().scrollBottomByMove(dy);
                 }
                 break;
             case MotionEvent.ACTION_CANCEL:
             case MotionEvent.ACTION_UP:
+                if (customRefreshLayoutProxy.getState()==
+                        CustomRefreshLayout.CustomRefreshLayoutProxy.FROM_TOP_TO_BOTTOM) {
+                    customRefreshLayoutProxy.getAnimationProxy().dealPullDownRelease();
+                } else if (customRefreshLayoutProxy.getState()==
+                        CustomRefreshLayout.CustomRefreshLayoutProxy.FROM_BOTTOM_TO_TOP) {
+                    customRefreshLayoutProxy.getAnimationProxy().dealPullUpRelease();
+                }
                 break;
         }
         return false;
